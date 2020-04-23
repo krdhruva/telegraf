@@ -33,16 +33,11 @@ func (*Chrony) SampleConfig() string {
   `
 }
 
-func (c *Chrony) Init() error {
-	var err error
-	c.path, err = exec.LookPath("chronyc")
-	if err != nil {
+func (c *Chrony) Gather(acc telegraf.Accumulator) error {
+	if len(c.path) == 0 {
 		return errors.New("chronyc not found: verify that chrony is installed and that chronyc is in your PATH")
 	}
-	return nil
-}
 
-func (c *Chrony) Gather(acc telegraf.Accumulator) error {
 	flags := []string{}
 	if !c.DNSLookup {
 		flags = append(flags, "-n")
@@ -125,7 +120,12 @@ func processChronycOutput(out string) (map[string]interface{}, map[string]string
 }
 
 func init() {
+	c := Chrony{}
+	path, _ := exec.LookPath("chronyc")
+	if len(path) > 0 {
+		c.path = path
+	}
 	inputs.Add("chrony", func() telegraf.Input {
-		return &Chrony{}
+		return &c
 	})
 }

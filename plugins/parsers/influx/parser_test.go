@@ -1,7 +1,6 @@
 package influx
 
 import (
-	"bytes"
 	"strconv"
 	"strings"
 	"testing"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/metric"
-	"github.com/influxdata/telegraf/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,11 +23,12 @@ var DefaultTime = func() time.Time {
 }
 
 var ptests = []struct {
-	name     string
-	input    []byte
-	timeFunc func() time.Time
-	metrics  []telegraf.Metric
-	err      error
+	name      string
+	input     []byte
+	timeFunc  func() time.Time
+	precision time.Duration
+	metrics   []telegraf.Metric
+	err       error
 }{
 	{
 		name:  "minimal",
@@ -496,7 +495,7 @@ var ptests = []struct {
 		err: nil,
 	},
 	{
-		name:  "no timestamp",
+		name:  "no timestamp full precision",
 		input: []byte("cpu value=42"),
 		timeFunc: func() time.Time {
 			return time.Unix(42, 123456789)
@@ -510,6 +509,27 @@ var ptests = []struct {
 						"value": 42.0,
 					},
 					time.Unix(42, 123456789),
+				),
+			),
+		},
+		err: nil,
+	},
+	{
+		name:  "no timestamp partial precision",
+		input: []byte("cpu value=42"),
+		timeFunc: func() time.Time {
+			return time.Unix(42, 123456789)
+		},
+		precision: 1 * time.Millisecond,
+		metrics: []telegraf.Metric{
+			Metric(
+				metric.New(
+					"cpu",
+					map[string]string{},
+					map[string]interface{}{
+						"value": 42.0,
+					},
+					time.Unix(42, 123000000),
 				),
 			),
 		},
@@ -631,11 +651,14 @@ func TestParser(t *testing.T) {
 	for _, tt := range ptests {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := NewMetricHandler()
-			parser := NewParser(handler)
-			parser.SetTimeFunc(DefaultTime)
+			handler.SetTimeFunc(DefaultTime)
 			if tt.timeFunc != nil {
-				parser.SetTimeFunc(tt.timeFunc)
+				handler.SetTimeFunc(tt.timeFunc)
 			}
+			if tt.precision > 0 {
+				handler.SetTimePrecision(tt.precision)
+			}
+			parser := NewParser(handler)
 
 			metrics, err := parser.Parse(tt.input)
 			require.Equal(t, tt.err, err)
@@ -665,41 +688,14 @@ func BenchmarkParser(b *testing.B) {
 	}
 }
 
-func TestStreamParser(t *testing.T) {
-	for _, tt := range ptests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := bytes.NewBuffer(tt.input)
-			parser := NewStreamParser(r)
-			parser.SetTimeFunc(DefaultTime)
-			if tt.timeFunc != nil {
-				parser.SetTimeFunc(tt.timeFunc)
-			}
-
-			var i int
-			for {
-				m, err := parser.Next()
-				if err != nil {
-					if err == EOF {
-						break
-					}
-					require.Equal(t, tt.err, err)
-					break
-				}
-
-				testutil.RequireMetricEqual(t, tt.metrics[i], m)
-				i++
-			}
-		})
-	}
-}
-
 func TestSeriesParser(t *testing.T) {
 	var tests = []struct {
-		name     string
-		input    []byte
-		timeFunc func() time.Time
-		metrics  []telegraf.Metric
-		err      error
+		name      string
+		input     []byte
+		timeFunc  func() time.Time
+		precision time.Duration
+		metrics   []telegraf.Metric
+		err       error
 	}{
 		{
 			name:    "empty",
@@ -753,10 +749,14 @@ func TestSeriesParser(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := NewMetricHandler()
-			parser := NewSeriesParser(handler)
+			handler.SetTimeFunc(DefaultTime)
 			if tt.timeFunc != nil {
-				parser.SetTimeFunc(tt.timeFunc)
+				handler.SetTimeFunc(tt.timeFunc)
 			}
+			if tt.precision > 0 {
+				handler.SetTimePrecision(tt.precision)
+			}
+			parser := NewSeriesParser(handler)
 
 			metrics, err := parser.Parse(tt.input)
 			require.Equal(t, tt.err, err)
@@ -791,11 +791,6 @@ func TestParserErrorString(t *testing.T) {
 			input:     []byte("cpu " + strings.Repeat("ab", maxErrorBufferSize) + "=invalid\ncpu value=42"),
 			errString: "metric parse error: expected field at 1:2054: \"cpu " + strings.Repeat("ab", maxErrorBufferSize)[:maxErrorBufferSize-4] + "...\"",
 		},
-		{
-			name:      "multiple line error",
-			input:     []byte("cpu value=42\ncpu value=invalid\ncpu value=42\ncpu value=invalid"),
-			errString: `metric parse error: expected field at 2:11: "cpu value=invalid"`,
-		},
 	}
 
 	for _, tt := range ptests {
@@ -805,67 +800,6 @@ func TestParserErrorString(t *testing.T) {
 
 			_, err := parser.Parse(tt.input)
 			require.Equal(t, tt.errString, err.Error())
-		})
-	}
-}
-
-func TestStreamParserErrorString(t *testing.T) {
-	var ptests = []struct {
-		name  string
-		input []byte
-		errs  []string
-	}{
-		{
-			name:  "multiple line error",
-			input: []byte("cpu value=42\ncpu value=invalid\ncpu value=42"),
-			errs: []string{
-				`metric parse error: expected field at 2:11: "cpu value="`,
-			},
-		},
-		{
-			name:  "handler error",
-			input: []byte("cpu value=9223372036854775808i\ncpu value=42"),
-			errs: []string{
-				`metric parse error: value out of range at 1:31: "cpu value=9223372036854775808i"`,
-			},
-		},
-		{
-			name:  "buffer too long",
-			input: []byte("cpu " + strings.Repeat("ab", maxErrorBufferSize) + "=invalid\ncpu value=42"),
-			errs: []string{
-				"metric parse error: expected field at 1:2054: \"cpu " + strings.Repeat("ab", maxErrorBufferSize)[:maxErrorBufferSize-4] + "...\"",
-			},
-		},
-		{
-			name:  "multiple errors",
-			input: []byte("foo value=1asdf2.0\nfoo value=2.0\nfoo value=3asdf2.0\nfoo value=4.0"),
-			errs: []string{
-				`metric parse error: expected field at 1:12: "foo value=1"`,
-				`metric parse error: expected field at 3:12: "foo value=3"`,
-			},
-		},
-	}
-
-	for _, tt := range ptests {
-		t.Run(tt.name, func(t *testing.T) {
-			parser := NewStreamParser(bytes.NewBuffer(tt.input))
-
-			var errs []error
-			for i := 0; i < 20; i++ {
-				_, err := parser.Next()
-				if err == EOF {
-					break
-				}
-
-				if err != nil {
-					errs = append(errs, err)
-				}
-			}
-
-			require.Equal(t, len(tt.errs), len(errs))
-			for i, err := range errs {
-				require.Equal(t, tt.errs[i], err.Error())
-			}
 		})
 	}
 }

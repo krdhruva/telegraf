@@ -49,7 +49,7 @@ in the `/etc/default/telegraf` file.
 USER="alice"
 INFLUX_URL="http://localhost:8086"
 INFLUX_SKIP_DATABASE_CREATION="true"
-INFLUX_PASSWORD="monkey123"
+INFLUX_PASSWORD=""
 ```
 
 `/etc/telegraf.conf`:
@@ -69,12 +69,11 @@ The above files will produce the following effective configuration file to be
 parsed:
 ```toml
 [global_tags]
-  user = "alice"
+  user = ""
 
 [[outputs.influxdb]]
   urls = "http://localhost:8086"
   skip_database_creation = true
-  password = "monkey123"
 ```
 
 ### Intervals
@@ -269,9 +268,6 @@ Parameters that can be used with any output plugin:
 - **metric_buffer_limit**: The maximum number of unsent metrics to buffer.
   Use this setting to override the agent `metric_buffer_limit` on a per plugin
   basis.
-- **name_override**: Override the original name of the measurement.
-- **name_prefix**: Specifies a prefix to attach to the measurement name.
-- **name_suffix**: Specifies a suffix to attach to the measurement name.
 
 The [metric filtering][] parameters can be used to limit what metrics are
 emitted from the output plugin.
@@ -454,9 +450,9 @@ The inverse of `taginclude`. Tags with a tag key matching one of the patterns
 will be discarded from the metric.  Any tag can be filtered including global
 tags and the agent `host` tag.
 
-#### Filtering Examples
+##### Filtering Examples
 
-##### Using tagpass and tagdrop:
+Using tagpass and tagdrop:
 ```toml
 [[inputs.cpu]]
   percpu = true
@@ -489,7 +485,7 @@ tags and the agent `host` tag.
     instance = ["isatap*", "Local*"]
 ```
 
-##### Using fieldpass and fielddrop:
+Using fieldpass and fielddrop:
 ```toml
 # Drop all metrics for guest & steal CPU usage
 [[inputs.cpu]]
@@ -502,7 +498,7 @@ tags and the agent `host` tag.
   fieldpass = ["inodes*"]
 ```
 
-##### Using namepass and namedrop:
+Using namepass and namedrop:
 ```toml
 # Drop all metrics about containers for kubelet
 [[inputs.prometheus]]
@@ -515,7 +511,7 @@ tags and the agent `host` tag.
   namepass = ["rest_client_*"]
 ```
 
-##### Using taginclude and tagexclude:
+Using taginclude and tagexclude:
 ```toml
 # Only include the "cpu" tag in the measurements for the cpu plugin.
 [[inputs.cpu]]
@@ -528,7 +524,7 @@ tags and the agent `host` tag.
   tagexclude = ["fstype"]
 ```
 
-##### Metrics can be routed to different outputs using the metric name and tags:
+Metrics can be routed to different outputs using the metric name and tags:
 ```toml
 [[outputs.influxdb]]
   urls = [ "http://localhost:8086" ]
@@ -550,11 +546,9 @@ tags and the agent `host` tag.
     cpu = ["cpu0"]
 ```
 
-##### Routing metrics to different outputs based on the input.
-
-Metrics are tagged with `influxdb_database` in the input, which is then used to
-select the output.  The tag is removed in the outputs before writing.
-
+Routing metrics to different outputs based on the input.  Metrics are tagged
+with `influxdb_database` in the input, which is then used to select the
+output.  The tag is removed in the outputs before writing.
 ```toml
 [[outputs.influxdb]]
   urls = ["http://influxdb.example.com"]

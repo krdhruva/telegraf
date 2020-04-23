@@ -114,7 +114,7 @@ telegraf config > telegraf.conf
 #### Generate config with only cpu input & influxdb output plugins defined:
 
 ```
-telegraf --section-filter agent:inputs:outputs --input-filter cpu --output-filter influxdb config
+telegraf --input-filter cpu --output-filter influxdb config
 ```
 
 #### Run a single telegraf collection, outputing metrics to stdout:
@@ -165,7 +165,6 @@ For documentation on the latest development code see the [documentation index][d
 * [chrony](./plugins/inputs/chrony)
 * [cisco_telemetry_gnmi](./plugins/inputs/cisco_telemetry_gnmi)
 * [cisco_telemetry_mdt](./plugins/inputs/cisco_telemetry_mdt)
-* [clickhouse](./plugins/inputs/clickhouse)
 * [cloud_pubsub](./plugins/inputs/cloud_pubsub) Google Cloud Pub/Sub
 * [cloud_pubsub_push](./plugins/inputs/cloud_pubsub_push) Google Cloud Pub/Sub push endpoint
 * [conntrack](./plugins/inputs/conntrack)
@@ -185,9 +184,7 @@ For documentation on the latest development code see the [documentation index][d
 * [aws ecs](./plugins/inputs/ecs) (Amazon Elastic Container Service, Fargate)
 * [elasticsearch](./plugins/inputs/elasticsearch)
 * [ethtool](./plugins/inputs/ethtool)
-* [eventhub_consumer](./plugins/inputs/eventhub_consumer) (Azure Event Hubs \& Azure IoT Hub)
 * [exec](./plugins/inputs/exec) (generic executable plugin, support JSON, influx, graphite and nagios)
-* [execd](./plugins/inputs/execd)
 * [fail2ban](./plugins/inputs/fail2ban)
 * [fibaro](./plugins/inputs/fibaro)
 * [file](./plugins/inputs/file)
@@ -226,10 +223,9 @@ For documentation on the latest development code see the [documentation index][d
 * [kibana](./plugins/inputs/kibana)
 * [kubernetes](./plugins/inputs/kubernetes)
 * [kube_inventory](./plugins/inputs/kube_inventory)
-* [lanz](./plugins/inputs/lanz)
 * [leofs](./plugins/inputs/leofs)
 * [linux_sysctl_fs](./plugins/inputs/linux_sysctl_fs)
-* [logparser](./plugins/inputs/logparser) (deprecated, use [tail](/plugins/inputs/tail))
+* [logparser](./plugins/inputs/logparser)
 * [logstash](./plugins/inputs/logstash)
 * [lustre2](./plugins/inputs/lustre2)
 * [mailchimp](./plugins/inputs/mailchimp)
@@ -286,7 +282,6 @@ For documentation on the latest development code see the [documentation index][d
 * [riak](./plugins/inputs/riak)
 * [salesforce](./plugins/inputs/salesforce)
 * [sensors](./plugins/inputs/sensors)
-* [sflow](./plugins/inputs/sflow)
 * [smart](./plugins/inputs/smart)
 * [snmp_legacy](./plugins/inputs/snmp_legacy)
 * [snmp](./plugins/inputs/snmp)
@@ -294,7 +289,7 @@ For documentation on the latest development code see the [documentation index][d
 * [socket_listener](./plugins/inputs/socket_listener)
 * [solr](./plugins/inputs/solr)
 * [sql server](./plugins/inputs/sqlserver) (microsoft)
-* [stackdriver](./plugins/inputs/stackdriver) (Google Cloud Monitoring)
+* [stackdriver](./plugins/inputs/stackdriver)
 * [statsd](./plugins/inputs/statsd)
 * [suricata](./plugins/inputs/suricata)
 * [swap](./plugins/inputs/swap)
@@ -324,7 +319,6 @@ For documentation on the latest development code see the [documentation index][d
   * [rollbar](./plugins/inputs/webhooks/rollbar)
 * [win_perf_counters](./plugins/inputs/win_perf_counters) (windows performance counters)
 * [win_services](./plugins/inputs/win_services)
-* [wireguard](./plugins/inputs/wireguard)
 * [wireless](./plugins/inputs/wireless)
 * [x509_cert](./plugins/inputs/x509_cert)
 * [zfs](./plugins/inputs/zfs)
@@ -358,23 +352,20 @@ For documentation on the latest development code see the [documentation index][d
 
 ## Processor Plugins
 
-* [clone](/plugins/processors/clone)
-* [converter](/plugins/processors/converter)
-* [date](/plugins/processors/date)
-* [dedup](/plugins/processors/dedup)
-* [enum](/plugins/processors/enum)
-* [override](/plugins/processors/override)
-* [parser](/plugins/processors/parser)
-* [pivot](/plugins/processors/pivot)
-* [printer](/plugins/processors/printer)
-* [regex](/plugins/processors/regex)
-* [rename](/plugins/processors/rename)
-* [s2geo](/plugins/processors/s2geo)
-* [strings](/plugins/processors/strings)
-* [tag_limit](/plugins/processors/tag_limit)
-* [template](/plugins/processors/template)
-* [topk](/plugins/processors/topk)
-* [unpivot](/plugins/processors/unpivot)
+* [clone](./plugins/processors/clone)
+* [converter](./plugins/processors/converter)
+* [date](./plugins/processors/date)
+* [enum](./plugins/processors/enum)
+* [override](./plugins/processors/override)
+* [parser](./plugins/processors/parser)
+* [pivot](./plugins/processors/pivot)
+* [printer](./plugins/processors/printer)
+* [regex](./plugins/processors/regex)
+* [rename](./plugins/processors/rename)
+* [strings](./plugins/processors/strings)
+* [tag_limit](./plugins/processors/tag_limit)
+* [topk](./plugins/processors/topk)
+* [unpivot](./plugins/processors/unpivot)
 
 ## Aggregator Plugins
 
@@ -417,7 +408,7 @@ For documentation on the latest development code see the [documentation index][d
 * [riemann](./plugins/outputs/riemann)
 * [riemann_legacy](./plugins/outputs/riemann_legacy)
 * [socket_writer](./plugins/outputs/socket_writer)
-* [stackdriver](./plugins/outputs/stackdriver) (Google Cloud Monitoring)
+* [stackdriver](./plugins/outputs/stackdriver)
 * [syslog](./plugins/outputs/syslog)
 * [tcp](./plugins/outputs/socket_writer)
 * [udp](./plugins/outputs/socket_writer)

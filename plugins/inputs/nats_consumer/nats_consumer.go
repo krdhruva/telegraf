@@ -3,14 +3,13 @@ package natsconsumer
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/internal/tls"
 	"github.com/influxdata/telegraf/plugins/inputs"
 	"github.com/influxdata/telegraf/plugins/parsers"
-	"github.com/nats-io/nats.go"
+	nats "github.com/nats-io/go-nats"
 )
 
 var (
@@ -32,14 +31,12 @@ func (e natsError) Error() string {
 }
 
 type natsConsumer struct {
-	QueueGroup  string   `toml:"queue_group"`
-	Subjects    []string `toml:"subjects"`
-	Servers     []string `toml:"servers"`
-	Secure      bool     `toml:"secure"`
-	Username    string   `toml:"username"`
-	Password    string   `toml:"password"`
-	Credentials string   `toml:"credentials"`
-
+	QueueGroup string   `toml:"queue_group"`
+	Subjects   []string `toml:"subjects"`
+	Servers    []string `toml:"servers"`
+	Secure     bool     `toml:"secure"`
+	Username   string   `toml:"username"`
+	Password   string   `toml:"password"`
 	tls.ClientConfig
 
 	Log telegraf.Logger
@@ -79,9 +76,6 @@ var sampleConfig = `
   ## Optional credentials
   # username = ""
   # password = ""
-
-  ## Optional NATS 2.0 and NATS NGS compatible user credentials
-  # credentials = "/etc/telegraf/nats.creds"
 
   ## Use Transport Layer Security
   # secure = false
@@ -141,18 +135,19 @@ func (n *natsConsumer) Start(acc telegraf.Accumulator) error {
 
 	var connectErr error
 
-	options := []nats.Option{
-		nats.MaxReconnects(-1),
-		nats.ErrorHandler(n.natsErrHandler),
-	}
+	// set default NATS connection options
+	opts := nats.DefaultOptions
+
+	// override max reconnection tries
+	opts.MaxReconnect = -1
+
+	// override servers if any were specified
+	opts.Servers = n.Servers
 
 	// override authentication, if any was specified
-	if n.Username != "" && n.Password != "" {
-		options = append(options, nats.UserInfo(n.Username, n.Password))
-	}
-
-	if n.Credentials != "" {
-		options = append(options, nats.UserCredentials(n.Credentials))
+	if n.Username != "" {
+		opts.User = n.Username
+		opts.Password = n.Password
 	}
 
 	if n.Secure {
@@ -161,17 +156,19 @@ func (n *natsConsumer) Start(acc telegraf.Accumulator) error {
 			return err
 		}
 
-		options = append(options, nats.Secure(tlsConfig))
+		opts.Secure = true
+		opts.TLSConfig = tlsConfig
 	}
 
 	if n.conn == nil || n.conn.IsClosed() {
-		n.conn, connectErr = nats.Connect(strings.Join(n.Servers, ","), options...)
+		n.conn, connectErr = opts.Connect()
 		if connectErr != nil {
 			return connectErr
 		}
 
 		// Setup message and error channels
 		n.errs = make(chan error)
+		n.conn.SetErrorHandler(n.natsErrHandler)
 
 		n.in = make(chan *nats.Msg, 1000)
 		for _, subj := range n.Subjects {
@@ -181,13 +178,14 @@ func (n *natsConsumer) Start(acc telegraf.Accumulator) error {
 			if err != nil {
 				return err
 			}
-
-			// set the subscription pending limits
-			err = sub.SetPendingLimits(n.PendingMessageLimit, n.PendingBytesLimit)
-			if err != nil {
+			// ensure that the subscription has been processed by the server
+			if err = n.conn.Flush(); err != nil {
 				return err
 			}
-
+			// set the subscription pending limits
+			if err = sub.SetPendingLimits(n.PendingMessageLimit, n.PendingBytesLimit); err != nil {
+				return err
+			}
 			n.subs = append(n.subs, sub)
 		}
 	}
