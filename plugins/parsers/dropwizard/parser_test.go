@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testTimeFunc = func() time.Time {
+var TimeFunc = func() time.Time {
 	return time.Unix(0, 0)
 }
 
@@ -528,7 +528,7 @@ func TestDropWizard(t *testing.T) {
 						map[string]interface{}{
 							"value": 42.0,
 						},
-						testTimeFunc(),
+						TimeFunc(),
 					),
 				),
 			},
@@ -547,7 +547,7 @@ func TestDropWizard(t *testing.T) {
 						map[string]interface{}{
 							"value": 42.0,
 						},
-						testTimeFunc(),
+						TimeFunc(),
 					),
 				),
 			},
@@ -573,7 +573,7 @@ func TestDropWizard(t *testing.T) {
 						map[string]interface{}{
 							"value": 42.0,
 						},
-						testTimeFunc(),
+						TimeFunc(),
 					),
 				),
 			},
@@ -584,7 +584,7 @@ func TestDropWizard(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser := NewParser()
-			parser.SetTimeFunc(testTimeFunc)
+			parser.SetTimeFunc(TimeFunc)
 			metrics, err := parser.Parse(tt.input)
 			tt.errFunc(t, err)
 

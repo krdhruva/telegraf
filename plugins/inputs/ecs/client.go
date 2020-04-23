@@ -1,9 +1,6 @@
 package ecs
 
 import (
-	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"time"
@@ -53,15 +50,9 @@ func (c *EcsClient) Task() (*Task, error) {
 
 	req, _ := http.NewRequest("GET", c.taskURL, nil)
 	resp, err := c.client.Do(req)
+
 	if err != nil {
 		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		// ignore the err here; LimitReader returns io.EOF and we're not interested in read errors.
-		body, _ := ioutil.ReadAll(io.LimitReader(resp.Body, 200))
-		return nil, fmt.Errorf("%s returned HTTP status %s: %q", c.taskURL, resp.Status, body)
 	}
 
 	task, err := unmarshalTask(resp.Body)
@@ -80,16 +71,9 @@ func (c *EcsClient) ContainerStats() (map[string]types.StatsJSON, error) {
 
 	req, _ := http.NewRequest("GET", c.statsURL, nil)
 	resp, err := c.client.Do(req)
+
 	if err != nil {
 		return map[string]types.StatsJSON{}, err
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		// ignore the err here; LimitReader returns io.EOF and we're not interested in read errors.
-		body, _ := ioutil.ReadAll(io.LimitReader(resp.Body, 200))
-		return nil, fmt.Errorf("%s returned HTTP status %s: %q", c.statsURL, resp.Status, body)
 	}
 
 	statsMap, err := unmarshalStats(resp.Body)

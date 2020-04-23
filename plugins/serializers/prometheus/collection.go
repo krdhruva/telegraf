@@ -14,8 +14,6 @@ import (
 
 const helpString = "Telegraf collected metric"
 
-type TimeFunc func() time.Time
-
 type MetricFamily struct {
 	Name string
 	Type telegraf.ValueType
@@ -24,7 +22,6 @@ type MetricFamily struct {
 type Metric struct {
 	Labels    []LabelPair
 	Time      time.Time
-	AddTime   time.Time
 	Scaler    *Scaler
 	Histogram *Histogram
 	Summary   *Summary
@@ -100,14 +97,14 @@ type Entry struct {
 }
 
 type Collection struct {
-	Entries map[MetricFamily]Entry
 	config  FormatConfig
+	Entries map[MetricFamily]Entry
 }
 
 func NewCollection(config FormatConfig) *Collection {
 	cache := &Collection{
-		Entries: make(map[MetricFamily]Entry),
 		config:  config,
+		Entries: make(map[MetricFamily]Entry),
 	}
 	return cache
 }
@@ -180,7 +177,7 @@ func (c *Collection) createLabels(metric telegraf.Metric) []LabelPair {
 	return labels
 }
 
-func (c *Collection) Add(metric telegraf.Metric, now time.Time) {
+func (c *Collection) Add(metric telegraf.Metric) {
 	labels := c.createLabels(metric)
 	for _, field := range metric.FieldList() {
 		metricName := MetricName(metric.Name(), field.Key, metric.Type())
@@ -228,10 +225,9 @@ func (c *Collection) Add(metric telegraf.Metric, now time.Time) {
 			}
 
 			m = &Metric{
-				Labels:  labels,
-				Time:    metric.Time(),
-				AddTime: now,
-				Scaler:  &Scaler{Value: value},
+				Labels: labels,
+				Time:   metric.Time(),
+				Scaler: &Scaler{Value: value},
 			}
 
 			entry.Metrics[metricKey] = m
@@ -240,7 +236,6 @@ func (c *Collection) Add(metric telegraf.Metric, now time.Time) {
 				m = &Metric{
 					Labels:    labels,
 					Time:      metric.Time(),
-					AddTime:   now,
 					Histogram: &Histogram{},
 				}
 			}
@@ -288,7 +283,6 @@ func (c *Collection) Add(metric telegraf.Metric, now time.Time) {
 				m = &Metric{
 					Labels:  labels,
 					Time:    metric.Time(),
-					AddTime: now,
 					Summary: &Summary{},
 				}
 			}
@@ -337,7 +331,7 @@ func (c *Collection) Expire(now time.Time, age time.Duration) {
 	expireTime := now.Add(-age)
 	for _, entry := range c.Entries {
 		for key, metric := range entry.Metrics {
-			if metric.AddTime.Before(expireTime) {
+			if metric.Time.Before(expireTime) {
 				delete(entry.Metrics, key)
 				if len(entry.Metrics) == 0 {
 					delete(c.Entries, entry.Family)

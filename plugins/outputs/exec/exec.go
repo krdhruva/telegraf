@@ -26,7 +26,7 @@ type Exec struct {
 }
 
 var sampleConfig = `
-  ## Command to ingest metrics via stdin.
+  ## Command to injest metrics via stdin.
   command = ["tee", "-a", "/dev/null"]
 
   ## Timeout for command to complete.

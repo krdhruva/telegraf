@@ -13,8 +13,6 @@ import (
 	"github.com/influxdata/telegraf/metric"
 )
 
-type TimeFunc func() time.Time
-
 type Parser struct {
 	MetricName        string
 	HeaderRowCount    int
@@ -33,7 +31,7 @@ type Parser struct {
 	TimeFunc          func() time.Time
 }
 
-func (p *Parser) SetTimeFunc(fn TimeFunc) {
+func (p *Parser) SetTimeFunc(fn metric.TimeFunc) {
 	p.TimeFunc = fn
 }
 

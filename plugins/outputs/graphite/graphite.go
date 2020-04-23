@@ -18,12 +18,11 @@ import (
 type Graphite struct {
 	GraphiteTagSupport bool
 	// URL is only for backwards compatibility
-	Servers   []string
-	Prefix    string
-	Template  string
-	Templates []string
-	Timeout   int
-	conns     []net.Conn
+	Servers  []string
+	Prefix   string
+	Template string
+	Timeout  int
+	conns    []net.Conn
 	tlsint.ClientConfig
 }
 
@@ -40,16 +39,6 @@ var sampleConfig = `
 
   ## Enable Graphite tags support
   # graphite_tag_support = false
-
-  ## Graphite templates patterns
-  ## 1. Template for cpu
-  ## 2. Template for disk*
-  ## 3. Default template
-  # templates = [
-  #  "cpu tags.measurement.host.field",
-  #  "disk* measurement.field",
-  #  "host.measurement.tags.field"
-  #]
 
   ## timeout in seconds for the write connection to graphite
   timeout = 2
@@ -145,7 +134,7 @@ func checkEOF(conn net.Conn) {
 func (g *Graphite) Write(metrics []telegraf.Metric) error {
 	// Prepare data
 	var batch []byte
-	s, err := serializers.NewGraphiteSerializer(g.Prefix, g.Template, g.GraphiteTagSupport, g.Templates)
+	s, err := serializers.NewGraphiteSerializer(g.Prefix, g.Template, g.GraphiteTagSupport)
 	if err != nil {
 		return err
 	}

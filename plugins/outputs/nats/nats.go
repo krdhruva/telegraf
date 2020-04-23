@@ -3,40 +3,32 @@ package nats
 import (
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/internal/tls"
 	"github.com/influxdata/telegraf/plugins/outputs"
 	"github.com/influxdata/telegraf/plugins/serializers"
-	"github.com/nats-io/nats.go"
+	nats_client "github.com/nats-io/go-nats"
 )
 
 type NATS struct {
-	Servers     []string `toml:"servers"`
-	Secure      bool     `toml:"secure"`
-	Username    string   `toml:"username"`
-	Password    string   `toml:"password"`
-	Credentials string   `toml:"credentials"`
-	Subject     string   `toml:"subject"`
-
+	Servers  []string `toml:"servers"`
+	Secure   bool     `toml:"secure"`
+	Username string   `toml:"username"`
+	Password string   `toml:"password"`
+	Subject  string   `toml:"subject"`
 	tls.ClientConfig
 
-	conn       *nats.Conn
+	conn       *nats_client.Conn
 	serializer serializers.Serializer
 }
 
 var sampleConfig = `
   ## URLs of NATS servers
   servers = ["nats://localhost:4222"]
-
   ## Optional credentials
   # username = ""
   # password = ""
-
-  ## Optional NATS 2.0 and NATS NGS compatible user credentials
-  # credentials = "/etc/telegraf/nats.creds"
-
   ## NATS subject for producer messages
   subject = "telegraf"
 
@@ -64,13 +56,19 @@ func (n *NATS) SetSerializer(serializer serializers.Serializer) {
 func (n *NATS) Connect() error {
 	var err error
 
-	opts := []nats.Option{
-		nats.MaxReconnects(-1),
-	}
+	// set default NATS connection options
+	opts := nats_client.DefaultOptions
+
+	// override max reconnection tries
+	opts.MaxReconnect = -1
+
+	// override servers, if any were specified
+	opts.Servers = n.Servers
 
 	// override authentication, if any was specified
 	if n.Username != "" {
-		opts = append(opts, nats.UserInfo(n.Username, n.Password))
+		opts.User = n.Username
+		opts.Password = n.Password
 	}
 
 	if n.Secure {
@@ -79,11 +77,12 @@ func (n *NATS) Connect() error {
 			return err
 		}
 
-		opts = append(opts, nats.Secure(tlsConfig))
+		opts.Secure = true
+		opts.TLSConfig = tlsConfig
 	}
 
 	// try and connect
-	n.conn, err = nats.Connect(strings.Join(n.Servers, ","), opts...)
+	n.conn, err = opts.Connect()
 
 	return err
 }

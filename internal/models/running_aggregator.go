@@ -29,11 +29,10 @@ func NewRunningAggregator(aggregator telegraf.Aggregator, config *AggregatorConf
 		tags["alias"] = config.Alias
 	}
 
-	aggErrorsRegister := selfstat.Register("aggregate", "errors", tags)
-	logger := NewLogger("aggregators", config.Name, config.Alias)
-	logger.OnErr(func() {
-		aggErrorsRegister.Incr(1)
-	})
+	logger := &Logger{
+		Name: logName("aggregators", config.Name, config.Alias),
+		Errs: selfstat.Register("aggregate", "errors", tags),
+	}
 
 	setLogIfExist(aggregator, logger)
 
@@ -176,8 +175,4 @@ func (r *RunningAggregator) push(acc telegraf.Accumulator) {
 	r.Aggregator.Push(acc)
 	elapsed := time.Since(start)
 	r.PushTime.Incr(elapsed.Nanoseconds())
-}
-
-func (r *RunningAggregator) Log() telegraf.Logger {
-	return r.log
 }

@@ -84,7 +84,7 @@ func NewHTTPClient(config *HTTPConfig) (*httpClient, error) {
 
 	userAgent := config.UserAgent
 	if userAgent == "" {
-		userAgent = internal.ProductToken()
+		userAgent = "Telegraf/" + internal.Version()
 	}
 
 	var headers = make(map[string]string, len(config.Headers)+2)

@@ -5,37 +5,39 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	_ "net/http/pprof" // Comment this line to disable pprof endpoint.
 	"os"
 	"os/signal"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/Azure/ClusterConfigurationAgent/LogHelper"
 	"github.com/influxdata/telegraf/agent"
 	"github.com/influxdata/telegraf/internal"
 	"github.com/influxdata/telegraf/internal/config"
 	"github.com/influxdata/telegraf/internal/goplugin"
-	"github.com/influxdata/telegraf/logger"
 	_ "github.com/influxdata/telegraf/plugins/aggregators/all"
 	"github.com/influxdata/telegraf/plugins/inputs"
 	_ "github.com/influxdata/telegraf/plugins/inputs/all"
 	"github.com/influxdata/telegraf/plugins/outputs"
 	_ "github.com/influxdata/telegraf/plugins/outputs/all"
 	_ "github.com/influxdata/telegraf/plugins/processors/all"
+	"github.com/kardianos/service"
 )
 
-// If you update these, update usage.go and usage_windows.go
 var fDebug = flag.Bool("debug", false,
 	"turn on debug logging")
-var pprofAddr = flag.String("pprof-addr", "",
+var pprofAddr = flag.String("pprof-addr", "localhost:8080",
 	"pprof address to listen on, not activate pprof if empty")
 var fQuiet = flag.Bool("quiet", false,
 	"run in quiet mode")
-var fTest = flag.Bool("test", false, "enable test mode: gather metrics, print them out, and exit. Note: Test mode only runs inputs, not processors, aggregators, or outputs")
+var fTest = flag.Bool("test", false, "enable test mode: gather metrics, print them out, and exit")
 var fTestWait = flag.Int("test-wait", 0, "wait up to this many seconds for service inputs to complete in test mode")
 var fConfig = flag.String("config", "", "configuration file to load")
 var fConfigDirectory = flag.String("config-directory", "",
@@ -69,14 +71,21 @@ var fPlugins = flag.String("plugin-directory", "",
 	"path to directory containing external plugins")
 
 var (
-	version string
-	commit  string
-	branch  string
+	azureRGName         string
+	azureResourceName   string
+	azureRPNamespace    = "Microsoft.Kubernetes"
+	azureLocation       string
+	azureSubscriptionID string
+	azureClusterType    string
+	version             string
+	commit              string
+	branch              string
 )
 
 var stop chan struct{}
 
 func reloadLoop(
+	stop chan struct{},
 	inputFilters []string,
 	outputFilters []string,
 	aggregatorFilters []string,
@@ -89,7 +98,7 @@ func reloadLoop(
 
 		ctx, cancel := context.WithCancel(context.Background())
 
-		signals := make(chan os.Signal, 1)
+		signals := make(chan os.Signal)
 		signal.Notify(signals, os.Interrupt, syscall.SIGHUP,
 			syscall.SIGTERM, syscall.SIGINT)
 		go func() {
@@ -113,10 +122,41 @@ func reloadLoop(
 	}
 }
 
+// SetMDSLogger sets Logger output to Geneva Writer
+func SetMDSLogger() {
+
+	azureSubscriptionID = getEnvironmentVar("AZURE_SUBSCRIPTION_ID", "")
+	azureRGName = getEnvironmentVar("AZURE_RESOURCE_GROUP", "")
+	azureResourceName = getEnvironmentVar("AZURE_RESOURCE_NAME", "")
+	azureLocation = getEnvironmentVar("AZURE_REGION", "")
+	azureClusterType = getEnvironmentVar("CLUSTER_TYPE", "") // Managed Cluster (AKS) or Connected Cluster
+
+	armID := fmt.Sprintf("subscriptions/%s/resourceGroups/%s/providers/%s/%s/%s",
+		azureSubscriptionID,
+		azureRGName,
+		azureRPNamespace,
+		azureClusterType,
+		azureResourceName)
+
+	genevaInfoWriter := &LogHelper.GenevaInfoWriter{}
+	genevaInfoWriter.Initialize(armID, azureLocation, "", LogHelper.ConnectAgentType, LogHelper.MetricsAgentName)
+	log.SetOutput(io.MultiWriter(genevaInfoWriter))
+
+}
+
+func getEnvironmentVar(envKey string, defaultValue string) (envValue string) {
+	envValue = os.Getenv(envKey)
+	if len(envValue) == 0 && defaultValue != "" {
+		envValue = defaultValue
+	}
+	return envValue
+}
+
 func runAgent(ctx context.Context,
 	inputFilters []string,
 	outputFilters []string,
 ) error {
+	SetMDSLogger()
 	log.Printf("I! Starting Telegraf %s", version)
 
 	// If no other options are specified, load the config file and run.
@@ -156,19 +196,6 @@ func runAgent(ctx context.Context,
 		return err
 	}
 
-	// Setup logging as configured.
-	logConfig := logger.LogConfig{
-		Debug:               ag.Config.Agent.Debug || *fDebug,
-		Quiet:               ag.Config.Agent.Quiet || *fQuiet,
-		LogTarget:           ag.Config.Agent.LogTarget,
-		Logfile:             ag.Config.Agent.Logfile,
-		RotationInterval:    ag.Config.Agent.LogfileRotationInterval,
-		RotationMaxSize:     ag.Config.Agent.LogfileRotationMaxSize,
-		RotationMaxArchives: ag.Config.Agent.LogfileRotationMaxArchives,
-	}
-
-	logger.SetupLogging(logConfig)
-
 	if *fTest || *fTestWait != 0 {
 		testWaitDuration := time.Duration(*fTestWait) * time.Second
 		return ag.Test(ctx, testWaitDuration)
@@ -204,6 +231,32 @@ func runAgent(ctx context.Context,
 func usageExit(rc int) {
 	fmt.Println(internal.Usage)
 	os.Exit(rc)
+}
+
+type program struct {
+	inputFilters      []string
+	outputFilters     []string
+	aggregatorFilters []string
+	processorFilters  []string
+}
+
+func (p *program) Start(s service.Service) error {
+	go p.run()
+	return nil
+}
+func (p *program) run() {
+	stop = make(chan struct{})
+	reloadLoop(
+		stop,
+		p.inputFilters,
+		p.outputFilters,
+		p.aggregatorFilters,
+		p.processorFilters,
+	)
+}
+func (p *program) Stop(s service.Service) error {
+	close(stop)
+	return nil
 }
 
 func formatFullVersion() string {
@@ -252,8 +305,6 @@ func main() {
 	if *fProcessorFilters != "" {
 		processorFilters = strings.Split(":"+strings.TrimSpace(*fProcessorFilters)+":", ":")
 	}
-
-	logger.SetupLogging(logger.LogConfig{})
 
 	// Load external plugins, if requested.
 	if *fPlugins != "" {
@@ -352,10 +403,79 @@ func main() {
 		log.Println("Telegraf version already configured to: " + internal.Version())
 	}
 
-	run(
-		inputFilters,
-		outputFilters,
-		aggregatorFilters,
-		processorFilters,
-	)
+	if runtime.GOOS == "windows" && windowsRunAsService() {
+		programFiles := os.Getenv("ProgramFiles")
+		if programFiles == "" { // Should never happen
+			programFiles = "C:\\Program Files"
+		}
+		svcConfig := &service.Config{
+			Name:        *fServiceName,
+			DisplayName: *fServiceDisplayName,
+			Description: "Collects data using a series of plugins and publishes it to" +
+				"another series of plugins.",
+			Arguments: []string{"--config", programFiles + "\\Telegraf\\telegraf.conf"},
+		}
+
+		prg := &program{
+			inputFilters:      inputFilters,
+			outputFilters:     outputFilters,
+			aggregatorFilters: aggregatorFilters,
+			processorFilters:  processorFilters,
+		}
+		s, err := service.New(prg, svcConfig)
+		if err != nil {
+			log.Fatal("E! " + err.Error())
+		}
+		// Handle the --service flag here to prevent any issues with tooling that
+		// may not have an interactive session, e.g. installing from Ansible.
+		if *fService != "" {
+			if *fConfig != "" {
+				svcConfig.Arguments = []string{"--config", *fConfig}
+			}
+			if *fConfigDirectory != "" {
+				svcConfig.Arguments = append(svcConfig.Arguments, "--config-directory", *fConfigDirectory)
+			}
+			//set servicename to service cmd line, to have a custom name after relaunch as a service
+			svcConfig.Arguments = append(svcConfig.Arguments, "--service-name", *fServiceName)
+
+			err := service.Control(s, *fService)
+			if err != nil {
+				log.Fatal("E! " + err.Error())
+			}
+			os.Exit(0)
+		} else {
+			_, err := s.Logger(nil)
+			if err == nil {
+				//When in service mode, register eventlog target andd setup default logging to eventlog
+				SetMDSLogger()
+			}
+			err = s.Run()
+
+			if err != nil {
+				log.Println("E! " + err.Error())
+			}
+		}
+	} else {
+		stop = make(chan struct{})
+		reloadLoop(
+			stop,
+			inputFilters,
+			outputFilters,
+			aggregatorFilters,
+			processorFilters,
+		)
+	}
+}
+
+// Return true if Telegraf should create a Windows service.
+func windowsRunAsService() bool {
+	if *fService != "" {
+		return true
+	}
+
+	if *fRunAsConsole {
+		return false
+	}
+
+	return !service.Interactive()
 }
